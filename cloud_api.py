@@ -25,7 +25,6 @@ class Clout_Api:
             b = file.read()
             tb = base64.b64encode(b)
             tb_str = tb.decode('utf-8')
-        BASE = 'http://127.0.0.1:5000/'
         r = self.__sess.post(
             BASE + 'clout',
             data=json.dumps({
@@ -88,20 +87,4 @@ class Clout_Api:
 if __name__ == '__main__':
     c = Clout_Api()
 
-    # r = c.subdirectory(
-    #     'c'
-    # )
-    r = c.read(
-        'c',
-        'programs',
-        'test.py',
-        download_file=r'C:\Users\Erik\Desktop\allscripts\nat_gas_api\imgay.py'
-    )
-    # for i in r['files']:
-    #     c.delete(
-    #         'c',
-    #         'misc',
-    #         i
-    #     )
-    # r = c.subdirectory('c','misc')
-    print(r)
+
