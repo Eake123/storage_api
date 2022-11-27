@@ -1,10 +1,11 @@
 from flask_restful.inputs import date, datetime_from_rfc822
 from flask_restful import Resource, Api, abort, reqparse,fields,marshal_with
 from flask import Flask, request, send_from_directory,render_template,session
-import werkzeug
 import os
-import json
 import base64
+import shutil
+from header_check import check_header
+from task_scheduler import powershell,cmd_command
 app = Flask(__name__)
 api = Api(app)
 api_get_args = reqparse.RequestParser()
@@ -13,15 +14,66 @@ api_get_args.add_argument('folder',type=str,required=False,help='start date requ
 api_post_args = reqparse.RequestParser()
 api_post_args.add_argument('file', type=str)
 api_post_args.add_argument('file_name', type=str)
+api_power_args = reqparse.RequestParser()
+api_power_args.add_argument('cmd_str', type=str)
+api_cmd_args = reqparse.RequestParser()
+api_cmd_args.add_argument('cmd_str', type=str)
 
 
-# api_get_args.add_argument('elements',type=str,required=False,help='list of elements you want')
-# api_get_args.add_argument('just_col',type=str,required=False,help='list of elements you want')
+class File:
+    def __init__(self,location) -> None:
+        self.location = location
+    
+    def response(self):
+        return {self.location:
+        {
+            'directory':self.check_type(),
+            'size':self.get_size()
+        }
+        }
 
-# resource_field = {
-#     'root':fields.Raw
-# }
-class drive(Resource):
+    def get_size(self):
+        return os.path.getsize(self.location) / (10 ** 6)
+    
+    def __str__(self) -> str:
+        return self.location
+
+    def check_type(self):
+        return os.path.isfile(self.location)
+
+
+
+
+class Directory:
+    def __init__(self,location) -> None:
+        self.location = location
+    
+
+    def response(self):
+        return {
+            'directory':True,
+            'size':self.get_size(),
+            'init':recursize_search(self.location)
+            }
+        
+    
+    
+    def get_size(self):
+        return os.path.getsize(self.location)
+def recursize_search(location):
+    file_list = {}
+    for file in os.listdir(location):
+        file = f'{location}\\{file}'
+        print(file)
+        file_list.update(File(file).response())
+    
+    return file_list
+
+    
+
+
+
+class drive:
     def __init__(self,kwargs) -> None:
         self.root = kwargs['root']  + ':\\CLOUT_STORAGE'
     
@@ -34,9 +86,7 @@ class drive(Resource):
             folder = self.root
         else:
             folder = self.get_folder(folder)
-        return os.listdir(
-            folder
-        )
+        return recursize_search(folder)
     
     def read(self,folder,file_name):
         folder = self.get_folder(folder)
@@ -77,7 +127,12 @@ class drive(Resource):
         try:
             folder = self.get_folder(folder)
             file_name = f'{folder}\\{file_name}'
-            os.remove(file_name)
+            file = File(file_name)
+            if file.check_type():
+
+                os.remove(file_name)
+            else:
+                shutil.rmtree(file_name)
             return {
                 'Success':True
             }
@@ -93,37 +148,83 @@ class drive(Resource):
 class clout(Resource):
     # @marshal_with(resource_field)
     def get(self):
-        get_args = api_get_args.parse_args()
-        post_args = api_post_args.parse_args()
-        d = drive(get_args)
-        return d.read(get_args['folder'],post_args['file_name'])
+        if check_header(request.headers):
+            get_args = api_get_args.parse_args()
+            post_args = api_post_args.parse_args()
+            d = drive(get_args)
+            return d.read(get_args['folder'],post_args['file_name'])
+        else:
+            return {
+                'ERROR':'Wrong Credentials'
+            }
+
     
     def post(self):
-        get_args = api_get_args.parse_args()
-        post_args = api_post_args.parse_args()
-        d = drive(get_args)
-        return d.download(get_args['folder'],post_args['file_name'],post_args['file'])
-    
+        if check_header(request.headers):
+            get_args = api_get_args.parse_args()
+            post_args = api_post_args.parse_args()
+            d = drive(get_args)
+            return d.download(get_args['folder'],post_args['file_name'],post_args['file'])
+        else:
+            return {
+                'ERROR':'Wrong Credentials'
+            }
+
 
     def delete(self):
-        get_args = api_get_args.parse_args()
-        post_args = api_post_args.parse_args()
-        d = drive(get_args)
-        direct = d.get_folder(get_args['folder'])
-        return d.delete(get_args['folder'],post_args['file_name'])
+        if check_header(request.headers):
+            get_args = api_get_args.parse_args()
+            post_args = api_post_args.parse_args()
+            d = drive(get_args)
+            return d.delete(get_args['folder'],post_args['file_name'])
+        else:
+            return {
+                'ERROR':'Wrong Credentials'
+            }
 
 class navigation(Resource):
     def get(self):
-        args = api_get_args.parse_args()
-        d = drive(args)
-        return {
-            'files':d.subfolder(args['folder'])
-        }
+        if check_header(request.headers):
+            args = api_get_args.parse_args()
+            d = drive(args)
+            return {
+                'files':d.subfolder(args['folder'])
+            }
+
+        else:
+            return {
+                'ERROR':'Wrong Credentials'
+            }
+
+
+class ps(Resource):
+    def post(self):
+        if check_header(request.headers):
+            args = api_power_args.parse_args()
+            powershell(args['cmd_str'])
+        else:
+            return {
+                'ERROR':'Wrong Credentials'
+            }            
+
+
+class cmd(Resource):
+    def post(self):
+        if check_header(request.headers):
+            args = api_cmd_args.parse_args()
+            cmd_command(args['cmd_str'])
+        else:
+            return {
+                'ERROR':'Wrong Credentials'
+            }         
+
+
 
 
 api.add_resource(clout,'/clout')
 api.add_resource(navigation,'/navigation')
-
+api.add_resource(ps,'/powershell')
+api.add_resource(cmd,'/cmd')
 if __name__ == '__main__':
     # app.run(port=5000,host=DOMAIN,debug=True)
     app.run(host='0.0.0.0', port=5000)
