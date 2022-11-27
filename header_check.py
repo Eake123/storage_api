@@ -60,7 +60,6 @@ class header_check:
     def _unpad(s):
         return s[:-ord(s[len(s)-1:])]
 if __name__ == '__main__':
-    password = 'TvtQ23L5vJqJ3x'
     # d = header_check(password)
     # d.write_check('Passed the Password Check')
     print(check_header(password))
